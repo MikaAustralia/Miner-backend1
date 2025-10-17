@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('https://miner-backend1-production-f41e.up.railway.app/start_game', {
+            // 🔹 ТЕПЕРЬ ОТНОСИТЕЛЬНЫЙ ПУТЬ - НЕТ CORS!
+            const response = await fetch('/start_game', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -64,7 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!gameData) return;
 
         try {
-            const response = await fetch('https://miner-backend1-production-f41e.up.railway.app/open_cell', {
+            // 🔹 ТЕПЕРЬ ОТНОСИТЕЛЬНЫЙ ПУТЬ - НЕТ CORS!
+            const response = await fetch('/open_cell', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -118,5 +120,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
-
-
