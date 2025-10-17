@@ -1,9 +1,9 @@
-from flask import Flask, request, jsonify, make_response  # Добавлен make_response
+from flask import Flask, request, jsonify, make_response, send_from_directory
 import random
 import json
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend')
 
 # Множители из Excel
 multipliers = {
@@ -37,11 +37,11 @@ def save_users(users):
 
 @app.route('/')
 def home():
-    response = make_response("Бэкенд запущен! Используй /start_game и /open_cell")
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+    return send_from_directory('frontend', 'index.html')
+
+@app.route('/<path:path>')
+def static_files(path):
+    return send_from_directory('frontend', path)
 
 @app.route('/start_game', methods=['POST', 'OPTIONS'])
 def start_game():
@@ -87,7 +87,6 @@ def start_game():
             'balance': user['balance']
         }))
 
-    # ✅ УБЕДИСЬ, ЧТО ЭТИ ЗАГОЛОВКИ ДОБАВЛЕНЫ К response
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', '*')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
@@ -134,7 +133,6 @@ def open_cell():
             'balance': user['balance']
         }))
 
-    # ✅ УБЕДИСЬ, ЧТО ЭТИ ЗАГОЛОВКИ ДОБАВЛЕНЫ К response
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', '*')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
