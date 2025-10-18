@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify, make_response, send_from_directory
+from flask import Flask, request, jsonify
+from flask_cors import CORS  # ✅ ДОБАВЛЕНО
 import random
 import json
 import os
 
-app = Flask(__name__, static_folder='frontend')
+app = Flask(__name__)
+CORS(app)  # ✅ ДОБАВЛЕНО
 
 # Множители из Excel
 multipliers = {
@@ -37,21 +39,10 @@ def save_users(users):
 
 @app.route('/')
 def home():
-    return send_from_directory('frontend', 'index.html')
+    return "Бэкенд запущен! Используй /start_game и /open_cell"
 
-@app.route('/<path:path>')
-def static_files(path):
-    return send_from_directory('frontend', path)
-
-@app.route('/start_game', methods=['POST', 'OPTIONS'])
+@app.route('/start_game', methods=['POST'])
 def start_game():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', '*')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
-
     data = request.json
     user_id = str(data.get('user_id'))
     bombs = int(data.get('bombs'))
@@ -65,42 +56,30 @@ def start_game():
     user = users[user_id]
 
     if user['balance'] < bet:
-        response = make_response(jsonify({"error": "Недостаточно средств"}), 400)
-    else:
-        user['balance'] -= bet
-        user['games_played'] += 1
+        return jsonify({"error": "Недостаточно средств"}), 400
 
-        field = [[0 for _ in range(5)] for _ in range(5)]
-        positions = [(i, j) for i in range(5) for j in range(5)]
-        bomb_positions = random.sample(positions, bombs)
+    user['balance'] -= bet
+    user['games_played'] += 1
 
-        for x, y in bomb_positions:
-            field[x][y] = -1  # мина
+    field = [[0 for _ in range(5)] for _ in range(5)]
+    positions = [(i, j) for i in range(5) for j in range(5)]
+    bomb_positions = random.sample(positions, bombs)
 
-        save_users(users)
+    for x, y in bomb_positions:
+        field[x][y] = -1  # мина
 
-        response = make_response(jsonify({
-            'field': field,
-            'bombs': bombs,
-            'bet': bet,
-            'multipliers': multipliers[bombs],
-            'balance': user['balance']
-        }))
+    save_users(users)
 
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+    return jsonify({
+        'field': field,
+        'bombs': bombs,
+        'bet': bet,
+        'multipliers': multipliers[bombs],
+        'balance': user['balance']
+    })
 
-@app.route('/open_cell', methods=['POST', 'OPTIONS'])
+@app.route('/open_cell', methods=['POST'])
 def open_cell():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', '*')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
-
     data = request.json
     x = int(data.get('x'))
     y = int(data.get('y'))
@@ -115,28 +94,23 @@ def open_cell():
     if field[x][y] == -1:
         user['losses'] += 1
         save_users(users)
-        response = make_response(jsonify({'result': 'lose', 'multiplier': 0}))
-    else:
-        step += 1
-        multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
-        win_amount = round(data.get('bet') * multiplier, 2)
-        user['balance'] += win_amount
-        user['wins'] += 1
+        return jsonify({'result': 'lose', 'multiplier': 0})
 
-        save_users(users)
+    step += 1
+    multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
+    win_amount = round(data.get('bet') * multiplier, 2)
+    user['balance'] += win_amount
+    user['wins'] += 1
 
-        response = make_response(jsonify({
-            'result': 'win',
-            'step': step,
-            'multiplier': multiplier,
-            'field': field,
-            'balance': user['balance']
-        }))
+    save_users(users)
 
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+    return jsonify({
+        'result': 'win',
+        'step': step,
+        'multiplier': multiplier,
+        'field': field,
+        'balance': user['balance']
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
