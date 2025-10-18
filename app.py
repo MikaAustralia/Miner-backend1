@@ -102,7 +102,12 @@ def open_cell():
         return jsonify({'result': 'lose', 'multiplier': 0})
 
     step += 1
-    multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
+    # ✅ ИСПРАВЛЕНАЯ ЛОГИКА: ПРОВЕРЯЕМ ГРАНИЦЫ СПИСКА
+    if step <= len(multipliers[bombs]):
+        multiplier = multipliers[bombs][step - 1]
+    else:
+        multiplier = multipliers[bombs][-1] # последний множитель
+
     win_amount = round(bet * multiplier, 2) # ✅ ИСПОЛЬЗУЕМ СТАВКУ
     user['balance'] += win_amount
     user['wins'] += 1
