@@ -87,6 +87,11 @@ def open_cell():
     step = data.get('step', 0)
     bombs = data.get('bombs')
     user_id = str(data.get('user_id'))
+    bet = data.get('bet') # ✅ ИЗВЛЕКАЕМ СТАВКУ
+
+    # ✅ ПРОВЕРЯЕМ, ЧТО СТАВКА НЕ None
+    if bet is None:
+        return jsonify({"error": "Ставка не указана"}), 400
 
     users = load_users()
     user = users.get(user_id, {"balance": 0})
@@ -98,7 +103,7 @@ def open_cell():
 
     step += 1
     multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
-    win_amount = round(data.get('bet') * multiplier, 2)
+    win_amount = round(bet * multiplier, 2) # ✅ ИСПОЛЬЗУЕМ СТАВКУ
     user['balance'] += win_amount
     user['wins'] += 1
 
