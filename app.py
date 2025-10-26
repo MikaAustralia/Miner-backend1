@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import random
 import json
 import os
@@ -35,8 +35,47 @@ def save_users(users):
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
-@app.route('/start_game', methods=['POST'])
+def add_cors_headers(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+@app.route('/')
+def home():
+    response = make_response("✅ Бэкенд Miner запущен! API: /start_game, /open_cell, /cashout, /balance")
+    return add_cors_headers(response)
+
+@app.route('/balance', methods=['POST', 'OPTIONS'])
+def get_balance():
+    if request.method == 'OPTIONS':
+        return add_cors_headers(make_response())
+
+    data = request.json
+    user_id = str(data.get('user_id'))
+    
+    users = load_users()
+    
+    if user_id not in users:
+        users[user_id] = {"balance": 50, "games_played": 0, "wins": 0, "losses": 0}
+        save_users(users)
+    
+    user = users[user_id]
+    
+    response = make_response(jsonify({
+        'balance': user['balance'],
+        'games_played': user['games_played'],
+        'wins': user['wins'],
+        'losses': user['losses']
+    }))
+    
+    return add_cors_headers(response)
+
+@app.route('/start_game', methods=['POST', 'OPTIONS'])
 def start_game():
+    if request.method == 'OPTIONS':
+        return add_cors_headers(make_response())
+
     data = request.json
     user_id = str(data.get('user_id'))
     bombs = int(data.get('bombs'))
@@ -50,30 +89,35 @@ def start_game():
     user = users[user_id]
 
     if user['balance'] < bet:
-        return jsonify({"error": "Недостаточно средств"}), 400
+        response = make_response(jsonify({"error": "Недостаточно средств"}), 400)
+    else:
+        user['balance'] -= bet
+        user['games_played'] += 1
 
-    user['balance'] -= bet
-    user['games_played'] += 1
+        field = [[0 for _ in range(5)] for _ in range(5)]
+        positions = [(i, j) for i in range(5) for j in range(5)]
+        bomb_positions = random.sample(positions, bombs)
 
-    field = [[0 for _ in range(5)] for _ in range(5)]
-    positions = [(i, j) for i in range(5) for j in range(5)]
-    bomb_positions = random.sample(positions, bombs)
+        for x, y in bomb_positions:
+            field[x][y] = -1
 
-    for x, y in bomb_positions:
-        field[x][y] = -1  # мина
+        save_users(users)
 
-    save_users(users)
+        response = make_response(jsonify({
+            'field': field,
+            'bombs': bombs,
+            'bet': bet,
+            'multipliers': multipliers[bombs],
+            'balance': user['balance']
+        }))
 
-    return jsonify({
-        'field': field,
-        'bombs': bombs,
-        'bet': bet,
-        'multipliers': multipliers[bombs],
-        'balance': user['balance']
-    })
+    return add_cors_headers(response)
 
-@app.route('/open_cell', methods=['POST'])
+@app.route('/open_cell', methods=['POST', 'OPTIONS'])
 def open_cell():
+    if request.method == 'OPTIONS':
+        return add_cors_headers(make_response())
+
     data = request.json
     x = int(data.get('x'))
     y = int(data.get('y'))
@@ -83,28 +127,58 @@ def open_cell():
     user_id = str(data.get('user_id'))
 
     users = load_users()
-    user = users.get(user_id, {"balance": 0})
+    user = users.get(user_id, {"balance": 50, "games_played": 0, "wins": 0, "losses": 0})
 
     if field[x][y] == -1:
         user['losses'] += 1
         save_users(users)
-        return jsonify({'result': 'lose', 'multiplier': 0})
+        
+        response = make_response(jsonify({
+            'result': 'lose', 
+            'multiplier': 0,
+            'balance': user['balance']
+        }))
+    else:
+        step += 1
+        multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
+        
+        save_users(users)
 
-    step += 1
-    multiplier = multipliers[bombs][step - 1] if step <= len(multipliers[bombs]) else multipliers[bombs][-1]
-    win_amount = round(data.get('bet') * multiplier, 2)
+        response = make_response(jsonify({
+            'result': 'win',
+            'step': step,
+            'multiplier': multiplier,
+            'balance': user['balance']
+        }))
+
+    return add_cors_headers(response)
+
+@app.route('/cashout', methods=['POST', 'OPTIONS'])
+def cashout():
+    if request.method == 'OPTIONS':
+        return add_cors_headers(make_response())
+
+    data = request.json
+    user_id = str(data.get('user_id'))
+    bet = float(data.get('bet'))
+    multiplier = float(data.get('multiplier'))
+
+    users = load_users()
+    user = users.get(user_id, {"balance": 50, "games_played": 0, "wins": 0, "losses": 0})
+
+    win_amount = round(bet * multiplier, 2)
     user['balance'] += win_amount
     user['wins'] += 1
 
     save_users(users)
 
-    return jsonify({
-        'result': 'win',
-        'step': step,
-        'multiplier': multiplier,
-        'field': field,
-        'balance': user['balance']
-    })
+    response = make_response(jsonify({
+        'balance': user['balance'],
+        'win_amount': win_amount
+    }))
+
+    return add_cors_headers(response)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
