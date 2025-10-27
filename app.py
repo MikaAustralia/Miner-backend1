@@ -5,7 +5,6 @@ import os
 
 app = Flask(__name__)
 
-# Множители из Excel
 multipliers = {
     3: [1.07, 1.22, 1.4, 1.62, 1.89, 2.22, 2.63, 3.15, 3.82, 4.7, 5.87, 7.47, 9.71, 12.94, 17.79, 25.41, 38.11, 60.97, 106.69, 213.38, 533.45, 2133.8],
     6: [1.25, 1.66, 2.24, 3.08, 4.31, 6.15, 8.98, 13.47, 20.81, 33.29, 55.48, 97.09, 180.31, 360.62, 793.36, 1983.4, 5950.2, 23800.8, 166605.6],
@@ -25,6 +24,13 @@ multipliers = {
 
 USERS_FILE = 'users.json'
 
+# Бонусы магазина
+SHOP_BONUSES = {
+    'bonus_100': {'coins': 100, 'games_required': 10},
+    'bonus_200': {'coins': 200, 'games_required': 15},
+    'bonus_500': {'coins': 500, 'games_required': 30}
+}
+
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
@@ -43,7 +49,7 @@ def add_cors_headers(response):
 
 @app.route('/')
 def home():
-    response = make_response("✅ Бэкенд Miner запущен! API: /start_game, /open_cell, /cashout, /balance")
+    response = make_response("✅ Бэкенд Miner запущен! API: /start_game, /open_cell, /cashout, /balance, /shop_bonus")
     return add_cors_headers(response)
 
 @app.route('/balance', methods=['POST', 'OPTIONS'])
@@ -57,16 +63,34 @@ def get_balance():
     users = load_users()
     
     if user_id not in users:
-        users[user_id] = {"balance": 50, "games_played": 0, "wins": 0, "losses": 0}
+        users[user_id] = {
+            "balance": 100,  # Начальный баланс 100
+            "games_played": 0, 
+            "wins": 0, 
+            "losses": 0,
+            "claimed_bonuses": []  # Список полученных бонусов
+        }
         save_users(users)
     
     user = users[user_id]
+    
+    # Проверяем доступные бонусы
+    available_bonuses = []
+    for bonus_id, bonus_data in SHOP_BONUSES.items():
+        if bonus_id not in user.get('claimed_bonuses', []):
+            if user['games_played'] >= bonus_data['games_required']:
+                available_bonuses.append({
+                    'id': bonus_id,
+                    'coins': bonus_data['coins'],
+                    'games_required': bonus_data['games_required']
+                })
     
     response = make_response(jsonify({
         'balance': user['balance'],
         'games_played': user['games_played'],
         'wins': user['wins'],
-        'losses': user['losses']
+        'losses': user['losses'],
+        'available_bonuses': available_bonuses
     }))
     
     return add_cors_headers(response)
@@ -84,7 +108,13 @@ def start_game():
     users = load_users()
 
     if user_id not in users:
-        users[user_id] = {"balance": 50, "games_played": 0, "wins": 0, "losses": 0}
+        users[user_id] = {
+            "balance": 100, 
+            "games_played": 0, 
+            "wins": 0, 
+            "losses": 0,
+            "claimed_bonuses": []
+        }
 
     user = users[user_id]
 
@@ -108,7 +138,8 @@ def start_game():
             'bombs': bombs,
             'bet': bet,
             'multipliers': multipliers[bombs],
-            'balance': user['balance']
+            'balance': user['balance'],
+            'games_played': user['games_played']
         }))
 
     return add_cors_headers(response)
@@ -127,7 +158,13 @@ def open_cell():
     user_id = str(data.get('user_id'))
 
     users = load_users()
-    user = users.get(user_id, {"balance": 50, "games_played": 0, "wins": 0, "losses": 0})
+    user = users.get(user_id, {
+        "balance": 100, 
+        "games_played": 0, 
+        "wins": 0, 
+        "losses": 0,
+        "claimed_bonuses": []
+    })
 
     if field[x][y] == -1:
         user['losses'] += 1
@@ -164,7 +201,13 @@ def cashout():
     multiplier = float(data.get('multiplier'))
 
     users = load_users()
-    user = users.get(user_id, {"balance": 50, "games_played": 0, "wins": 0, "losses": 0})
+    user = users.get(user_id, {
+        "balance": 100, 
+        "games_played": 0, 
+        "wins": 0, 
+        "losses": 0,
+        "claimed_bonuses": []
+    })
 
     win_amount = round(bet * multiplier, 2)
     user['balance'] += win_amount
@@ -175,6 +218,59 @@ def cashout():
     response = make_response(jsonify({
         'balance': user['balance'],
         'win_amount': win_amount
+    }))
+
+    return add_cors_headers(response)
+
+@app.route('/shop_bonus', methods=['POST', 'OPTIONS'])
+def shop_bonus():
+    if request.method == 'OPTIONS':
+        return add_cors_headers(make_response())
+
+    data = request.json
+    user_id = str(data.get('user_id'))
+    bonus_id = data.get('bonus_id')
+
+    users = load_users()
+    user = users.get(user_id, {
+        "balance": 100, 
+        "games_played": 0, 
+        "wins": 0, 
+        "losses": 0,
+        "claimed_bonuses": []
+    })
+
+    # Проверяем существование бонуса
+    if bonus_id not in SHOP_BONUSES:
+        response = make_response(jsonify({"error": "Неизвестный бонус"}), 400)
+        return add_cors_headers(response)
+
+    bonus_data = SHOP_BONUSES[bonus_id]
+
+    # Проверяем, не был ли бонус уже получен
+    if bonus_id in user.get('claimed_bonuses', []):
+        response = make_response(jsonify({"error": "Бонус уже получен"}), 400)
+        return add_cors_headers(response)
+
+    # Проверяем количество игр
+    if user['games_played'] < bonus_data['games_required']:
+        response = make_response(jsonify({
+            "error": f"Нужно сыграть ещё {bonus_data['games_required'] - user['games_played']} игр"
+        }), 400)
+        return add_cors_headers(response)
+
+    # Начисляем бонус
+    user['balance'] += bonus_data['coins']
+    if 'claimed_bonuses' not in user:
+        user['claimed_bonuses'] = []
+    user['claimed_bonuses'].append(bonus_id)
+
+    save_users(users)
+
+    response = make_response(jsonify({
+        'balance': user['balance'],
+        'bonus_coins': bonus_data['coins'],
+        'message': f'Получено {bonus_data["coins"]} монет!'
     }))
 
     return add_cors_headers(response)
