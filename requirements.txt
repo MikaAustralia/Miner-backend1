@@ -1,7 +1,8 @@
-pydantic-core==2.20.0
+pydantic-core==2.20.1
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.8.2
 python-telegram-bot==20.7
 requests==2.31.0
+
 
